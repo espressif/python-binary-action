@@ -1,0 +1,315 @@
+name: Python Binary Build Action
+description: Build Python applications into standalone executables for multiple architectures
+
+inputs:
+  scripts:
+    description: Space-separated list of Python scripts to build
+    required: true
+  output-dir:
+    description: Output directory for built executables
+    required: true
+  include-data-dirs:
+    description: 'JSON object mapping script names to data directories to include.
+      Supports wildcards (*) and exact matches. Format: {"script.py": ["./data"],
+      "*": ["./common"]}'
+    required: false
+    default: '[]'
+  script-name:
+    description: Space-separated list of output names for executables. Must match
+      the length of `scripts` variable. If not provided, the script name will be used.
+    required: false
+    default: ''
+  icon-file:
+    description: Path to icon file (Windows only)
+    required: false
+    default: ''
+  target-platform:
+    description: 'Target platform: windows-amd64, linux-amd64, macos-amd64, macos-arm64,
+      linux-armv7, linux-aarch64'
+    required: true
+  python-version:
+    description: Python version to use for building. Make sure that the version is
+      available on all runners.
+    required: false
+    default: '3.13'
+  pyinstaller-version:
+    description: PyInstaller version to install. Default is 6.11.1 because it has
+      the lowest false positive rate with antivirus. For latest version, use empty string.
+    required: false
+    default: 6.11.1
+  additional-args:
+    description: Additional PyInstaller arguments
+    required: false
+    default: ''
+  pip-extra-index-url:
+    description: Extra pip index URL
+    required: false
+    default: https://dl.espressif.com/pypi
+  install-deps-command:
+    description: Command to install project dependencies. Command will be executed
+      like `python -m {install-deps-command}`
+    required: false
+    default: pip install --user --prefer-binary -e .
+  additional-arm-packages:
+    description: 'ARMv7 ONLY: Additional system packages to install (space-separated).
+      e.g. for cryptography: openssl libffi-dev libffi7 libssl-dev'
+    required: false
+    default: ''
+  test-command-args:
+    description: Command arguments to test binaries (e.g. "--help")
+    required: false
+    default: --help
+
+outputs:
+  executable-extension:
+    description: File extension of built executables
+    value: ${{ steps.setup-platform.outputs.exe-extension }}
+  build-success:
+    description: Whether the build was successful
+    value: ${{ steps.build.outputs.success }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup platform variables
+      id: setup-platform
+      shell: bash
+      run: |
+        case "${{ inputs.target-platform }}" in
+          windows-amd64)
+            echo "exe-extension=.exe" >> $GITHUB_OUTPUT
+            echo "data-separator=;" >> $GITHUB_OUTPUT
+            ;;
+          linux-amd64)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            ;;
+          macos-amd64|macos-arm64)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            ;;
+          linux-armv7)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "arm-arch=armv7" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            ;;
+          linux-aarch64)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
+    - name: Build for ARMv7 architecture
+      if: inputs.target-platform == 'linux-armv7'
+      uses: uraimo/run-on-arch-action@v3
+      with:
+        arch: ${{ steps.setup-platform.outputs.arm-arch }}
+        # This cannot be updated because of missing libffi7 in 24.04 (cryptography requires it)
+        distro: ubuntu22.04
+        shell: /bin/bash
+        githubToken: ${{ github.token }}
+        setup: mkdir -p "${PWD}/${{ inputs.output-dir }}"
+        dockerRunArgs: |
+          --volume "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}"
+          --volume "${GITHUB_ACTION_PATH}/process_include_dirs.py:${PWD}/process_include_dirs.py"
+        install: |
+          apt-get update -y
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:deadsnakes/ppa
+          apt-get update -y
+          apt-get install --ignore-missing -y curl python${{ inputs.python-version }} python${{ inputs.python-version }}-dev pkg-config gcc g++ patchelf binutils zlib1g-dev ${{ inputs.additional-arm-packages }}
+          # Install pip for requested Python version using get-pip.py as ensurepip does not work here
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python${{ inputs.python-version }}
+          python${{ inputs.python-version }} -m pip install --upgrade pip setuptools wheel
+        run: |
+          export PIP_BREAK_SYSTEM_PACKAGES=1
+          adduser --disabled-password --gecos "" builder
+          chmod -R a+rwx /home/runner/work
+          su builder <<'EOF'
+          export PATH=$PATH:/home/builder/.local/bin
+
+          # Set pip extra index if provided
+          if [ -n "${{ inputs.pip-extra-index-url }}" ]; then
+            export PIP_EXTRA_INDEX_URL="${{ inputs.pip-extra-index-url }}"
+          fi
+
+          # Install PyInstaller
+          if [ "${{ inputs.pyinstaller-version }}" = "latest" ]; then
+            python${{ inputs.python-version }} -m pip install pyinstaller
+          else
+            python${{ inputs.python-version }} -m pip install pyinstaller==${{ inputs.pyinstaller-version }}
+          fi
+
+          # Install dependencies
+          python${{ inputs.python-version }} -m ${{ inputs.install-deps-command }}
+
+          # Build each file
+          IFS=' ' read -ra PYTHON_FILES <<< "${{ inputs.scripts }}"
+          IFS=' ' read -ra SCRIPT_NAMES <<< "${{ inputs.script-name }}"
+
+          for i in "${!PYTHON_FILES[@]}"; do
+            file="${PYTHON_FILES[$i]}"
+            echo "Building $file for ${{ inputs.target-platform }}..."
+
+            cmd="python${{ inputs.python-version }} -m PyInstaller --onefile --distpath=${{ inputs.output-dir }}"
+
+            # Add custom name if provided
+            if [ -n "${{ inputs.script-name }}" ] && [ $i -lt ${#SCRIPT_NAMES[@]} ]; then
+              custom_name="${SCRIPT_NAMES[$i]}"
+              cmd="$cmd --name=$custom_name"
+              echo "Using custom name: $custom_name"
+            fi
+
+            # Add include-data-dirs using Python script
+            echo "Processing include-data-dirs for $file..."
+            include_flags=$(python${{ inputs.python-version }} process_include_dirs.py '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' $file)
+            echo "Include flags result: '$include_flags'"
+            if [ -n "$include_flags" ]; then
+              cmd="$cmd $include_flags"
+              echo "Added include flags to command"
+            else
+              echo "No include flags generated"
+            fi
+
+            # Add additional arguments
+            if [ -n "${{ inputs.additional-args }}" ]; then
+              cmd="$cmd ${{ inputs.additional-args }}"
+            fi
+
+            cmd="$cmd $file"
+            echo "Executing: $cmd"
+            eval "$cmd"
+          done
+
+          # Test binaries
+          for i in "${!PYTHON_FILES[@]}"; do
+            file="${PYTHON_FILES[$i]}"
+
+            # Determine executable name
+            if [ -n "${{ inputs.script-name }}" ] && [ $i -lt ${#SCRIPT_NAMES[@]} ]; then
+              custom_name="${SCRIPT_NAMES[$i]}"
+              executable="${{ inputs.output-dir }}/${custom_name}${{ steps.setup-platform.outputs.exe-extension }}"
+            else
+              base_name=$(basename "$file" .py)
+              executable="${{ inputs.output-dir }}/${base_name}${{ steps.setup-platform.outputs.exe-extension }}"
+            fi
+
+            echo "Testing $executable..."
+            if [ -f "$executable" ]; then
+              echo "✓ $executable exists ($(du -h "$executable" | cut -f1))"
+              "$executable" ${{ inputs.test-command-args }} || exit 1
+            else
+              echo "✗ $executable not found"
+              exit 1
+            fi
+          done
+          EOF
+
+    - name: Install PyInstaller (non-ARMv7)
+      if: inputs.target-platform != 'linux-armv7'
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.pip-extra-index-url }}" ]; then
+          echo "PIP_EXTRA_INDEX_URL=${{ inputs.pip-extra-index-url }}" >> $GITHUB_ENV
+        fi
+
+        if [ "${{ inputs.pyinstaller-version }}" = "latest" ]; then
+          python -m pip install pyinstaller
+        else
+          python -m pip install pyinstaller==${{ inputs.pyinstaller-version }}
+        fi
+
+    - name: Install project dependencies (non-ARMv7)
+      if: inputs.target-platform != 'linux-armv7'
+      shell: bash
+      run: ${{ inputs.install-deps-command }}
+
+    - name: Build with PyInstaller (non-ARMv7)
+      if: inputs.target-platform != 'linux-armv7'
+      id: build
+      shell: bash
+      run: |
+        # Build each Python file
+        IFS=' ' read -ra PYTHON_FILES <<< "${{ inputs.scripts }}"
+        IFS=' ' read -ra SCRIPT_NAMES <<< "${{ inputs.script-name }}"
+
+        for i in "${!PYTHON_FILES[@]}"; do
+          file="${PYTHON_FILES[$i]}"
+          echo "Building $file for ${{ inputs.target-platform }}..."
+
+          # Start building the command
+          cmd="python -m PyInstaller --onefile --distpath=${{ inputs.output-dir }}"
+
+          # Add custom name if provided
+          if [ -n "${{ inputs.script-name }}" ] && [ $i -lt ${#SCRIPT_NAMES[@]} ]; then
+            custom_name="${SCRIPT_NAMES[$i]}"
+            cmd="$cmd --name=$custom_name"
+            echo "Using custom name: $custom_name"
+          fi
+
+          # Windows-specific options
+          if [ "${{ inputs.target-platform }}" = "windows-amd64" ]; then
+            if [ -n "${{ inputs.icon-file }}" ]; then
+              cmd="$cmd --icon=${{ inputs.icon-file }}"
+            fi
+          fi
+
+          # Add include-data-dirs using Python script
+          echo "Processing include-data-dirs for $file..."
+          include_flags=$(python $GITHUB_ACTION_PATH/process_include_dirs.py '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' $file)
+          echo "Include flags result: '$include_flags'"
+          if [ -n "$include_flags" ]; then
+            cmd="$cmd $include_flags"
+            echo "Added include flags to command"
+          else
+            echo "No include flags generated"
+          fi
+
+          # Add additional arguments
+          if [ -n "${{ inputs.additional-args }}" ]; then
+            cmd="$cmd ${{ inputs.additional-args }}"
+          fi
+
+          # Add the file to build
+          cmd="$cmd $file"
+
+          echo "Executing: $cmd"
+          eval "$cmd"
+        done
+
+        echo "success=true" >> $GITHUB_OUTPUT
+
+    - name: Verify builds (non-ARMv7)
+      if: inputs.target-platform != 'linux-armv7'
+      shell: bash
+      run: |-
+        echo "Verifying built executables..."
+        IFS=' ' read -ra PYTHON_FILES <<< "${{ inputs.scripts }}"
+        IFS=' ' read -ra SCRIPT_NAMES <<< "${{ inputs.script-name }}"
+
+        for i in "${!PYTHON_FILES[@]}"; do
+          file="${PYTHON_FILES[$i]}"
+
+          # Determine executable name
+          if [ -n "${{ inputs.script-name }}" ] && [ $i -lt ${#SCRIPT_NAMES[@]} ]; then
+            custom_name="${SCRIPT_NAMES[$i]}"
+            executable="${{ inputs.output-dir }}/${custom_name}${{ steps.setup-platform.outputs.exe-extension }}"
+          else
+            base_name=$(basename "$file" .py)
+            executable="${{ inputs.output-dir }}/${base_name}${{ steps.setup-platform.outputs.exe-extension }}"
+          fi
+
+          if [ -f "$executable" ]; then
+            echo "✓ $executable exists ($(du -h "$executable" | cut -f1))"
+            # Test that it runs
+            if "$executable" ${{ inputs.test-command-args }}; then
+              echo "✓ $executable runs successfully"
+            else
+              echo "⚠ $executable may have issues"
+              exit 1
+            fi
+          else
+            echo "✗ $executable not found"
+            exit 1
+          fi
+        done
