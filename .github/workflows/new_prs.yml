@@ -4,7 +4,7 @@ name: Sync remain PRs to Jira
 # Note that, PRs can also get synced when new PR comment is created
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: 0 * * * *
 
 jobs:
   sync_prs_to_jira:
@@ -21,6 +21,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JIRA_PASS: ${{ secrets.JIRA_PASS }}
           JIRA_PROJECT: IDFGH
-          JIRA_COMPONENT: GitHub
+          JIRA_COMPONENT: tools
           JIRA_URL: ${{ secrets.JIRA_URL }}
           JIRA_USER: ${{ secrets.JIRA_USER }}
