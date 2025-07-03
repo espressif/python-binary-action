@@ -164,6 +164,24 @@ Building the project with default configuration will result in script name `__ma
     test-command-args: '--version'
 ```
 
+### Signing Windows Binaries
+
+If you would like to sign Windows binaries, you can set `certificate` and the action will also take care of signing all binaries.
+It is also recommended to use `certificate-password`.
+
+The `certificate` should be a PFX (Personal Information Exchange) certificate file encoded in base64 format.
+
+```yaml
+- name: Build Python executable
+  uses: espressif/python-binary-action@master
+  with:
+    scripts: 'app.py'
+    output-dir: './dist'
+    target-platform: 'windows-amd64'
+    certificate: ${{ secrets.CERTIFICATE }}
+    certificate-password: ${{ secrets.CERTIFICATE_PASSWORD }}
+```
+
 ### Complete Workflow
 
 Here you can see a simplified version of workflow used in [esptool](https://github.com/espressif/esptool/) repository:
@@ -257,6 +275,8 @@ jobs:
 | `install-deps-command`    | Command to install project dependencies   | `"pip install --user --prefer-binary -e ."` | `"pip install -r requirements.txt"`          |
 | `additional-arm-packages` | ARMv7 ONLY: Additional system packages    | `""`                                        | `"openssl libffi-dev"`                       |
 | `test-command-args`       | Command arguments to test executables     | `"--help"`                                  | `"--version"`                                |
+| `certificate`             | Certificate to use for signing binaries   | `""`                                        | `${{ secrets.CERTIFICATE }}`                 |
+| `certificate-password`    | Password for the certificate              | `""`                                        | `${{ secrets.CERTIFICATE_PASSWORD }}`        |
 
 > [!IMPORTANT]
 > Be careful when changing `pyinstaller-version` as it might lead to increased false positives with anti-virus software. It is recommended to check your executables with antivirus software such as [Virustotal](https://www.virustotal.com/gui/home/upload).
