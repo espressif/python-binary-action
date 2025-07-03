@@ -59,6 +59,14 @@ inputs:
     description: Command arguments to test binaries (e.g. "--help")
     required: false
     default: --help
+  certificate:
+    description: Certificate to use for signing binaries
+    required: false
+    default: ''
+  certificate-password:
+    description: Password for the certificate
+    required: false
+    default: ''
 
 outputs:
   executable-extension:
@@ -313,3 +321,22 @@ runs:
             exit 1
           fi
         done
+
+    - name: Sign binaries
+      if: inputs.target-platform == 'windows-amd64'
+      env:
+        CERTIFICATE: ${{ inputs.certificate }}
+        CERTIFICATE_PASSWORD: ${{ inputs.certificate-password }}
+      shell: pwsh
+      run: |-
+        if ([string]::IsNullOrEmpty($env:CERTIFICATE)) {
+          Write-Host "::warning title=Signing::Certificate is not set, skipping signing"
+          exit 0
+        }
+
+        $pythonFiles = "${{ inputs.scripts }}".Split(' ')
+        foreach ($file in $pythonFiles) {
+          $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file)
+          $executable = "./${{ inputs.output-dir }}/${baseName}${{ steps.setup-platform.outputs.exe-extension }}"
+          & (Join-Path $env:GITHUB_ACTION_PATH "Sign-File.ps1") -Path $executable
+        }
