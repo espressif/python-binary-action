@@ -8,6 +8,7 @@ import json
 import argparse
 import fnmatch
 import sys
+import os
 
 
 def fix_windows_paths(include_dirs_json: str) -> str:
@@ -81,9 +82,12 @@ Examples:
 
   # Dict format (per-script configuration with wildcard support)
   python process_include_dirs.py '{"main.py": ["./assets"], "*": ["./common"]}' ':' 'main.py'
+
+  # File input (to avoid shell escaping issues)
+  python process_include_dirs.py '/tmp/include_data_dirs.json' ':' 'main.py'
         """,  # noqa: E501
     )
-    parser.add_argument("include_dirs", help="JSON string of include directories")
+    parser.add_argument("include_dirs", help="JSON string or file path of include directories")
     parser.add_argument(
         "data_separator",
         help="Data separator for PyInstaller --add-data (; for Windows, : for Unix)",
@@ -91,7 +95,15 @@ Examples:
     parser.add_argument("target_script", help="Target script name for filtering")
 
     args = parser.parse_args()
-    result = process_include_dirs(args.include_dirs, args.data_separator, args.target_script)
+
+    # Check if include_dirs is a file path
+    if os.path.isfile(args.include_dirs):
+        with open(args.include_dirs, "r") as f:
+            include_dirs_content = f.read()
+    else:
+        include_dirs_content = args.include_dirs
+
+    result = process_include_dirs(include_dirs_content, args.data_separator, args.target_script)
     print(result)
 
 
