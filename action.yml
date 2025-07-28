@@ -1,0 +1,263 @@
+name: Python Binary Build Action
+description: Build Python applications into standalone executables for multiple architectures
+
+inputs:
+  scripts:
+    description: Space-separated list of Python scripts to build
+    required: true
+  output-dir:
+    description: Output directory for built executables
+    required: true
+  include-data-dirs:
+    description: 'JSON object mapping script names to data directories to include.
+      Supports wildcards (*) and exact matches. Format: {"script.py": ["./data"],
+      "*": ["./common"]}'
+    required: false
+    default: '[]'
+  script-name:
+    description: Space-separated list of output names for executables. Must match
+      the length of `scripts` variable. If not provided, the script name will be used.
+    required: false
+    default: ''
+  icon-file:
+    description: Path to icon file (Windows only)
+    required: false
+    default: ''
+  target-platform:
+    description: 'Target platform: windows-amd64, linux-amd64, macos-amd64, macos-arm64,
+      linux-armv7, linux-aarch64'
+    required: true
+  python-version:
+    description: Python version to use for building. Make sure that the version is
+      available on all runners.
+    required: false
+    default: '3.13'
+  pyinstaller-version:
+    description: PyInstaller version to install. Default is 6.11.1 because it has
+      the lowest false positive rate with antivirus. For latest version, use empty
+      string.
+    required: false
+    default: 6.11.1
+  additional-args:
+    description: Additional PyInstaller arguments
+    required: false
+    default: ''
+  pip-extra-index-url:
+    description: Extra pip index URL
+    required: false
+    default: https://dl.espressif.com/pypi
+  install-deps-command:
+    description: Command to install project dependencies. Command will be executed
+      like `python -m {install-deps-command}`
+    required: false
+    default: pip install --user --prefer-binary -e .
+  additional-arm-packages:
+    description: 'ARMv7 ONLY: Additional system packages to install (space-separated).
+      e.g. for cryptography: openssl libffi-dev libffi7 libssl-dev'
+    required: false
+    default: ''
+  test-command-args:
+    description: Command arguments to test binaries (e.g. "--help")
+    required: false
+    default: --help
+  certificate:
+    description: Certificate to use for signing binaries
+    required: false
+    default: ''
+  certificate-password:
+    description: Password for the certificate
+    required: false
+    default: ''
+
+outputs:
+  executable-extension:
+    description: File extension of built executables
+    value: ${{ steps.setup-platform.outputs.exe-extension }}
+  build-success:
+    description: Whether the build was successful
+    value: ${{ steps.build.outputs.success }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup platform variables
+      id: setup-platform
+      shell: bash
+      run: |
+        case "${{ inputs.target-platform }}" in
+          windows-amd64)
+            echo "exe-extension=.exe" >> $GITHUB_OUTPUT
+            echo "data-separator=;" >> $GITHUB_OUTPUT
+            echo "needs-docker=false" >> $GITHUB_OUTPUT
+            echo "needs-arm-emulation=false" >> $GITHUB_OUTPUT
+            ;;
+          linux-amd64|linux-aarch64)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            echo "needs-docker=true" >> $GITHUB_OUTPUT
+            echo "needs-arm-emulation=false" >> $GITHUB_OUTPUT
+            ;;
+          macos-amd64|macos-arm64)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            echo "needs-docker=false" >> $GITHUB_OUTPUT
+            echo "needs-arm-emulation=false" >> $GITHUB_OUTPUT
+            ;;
+          linux-armv7)
+            echo "exe-extension=" >> $GITHUB_OUTPUT
+            echo "data-separator=:" >> $GITHUB_OUTPUT
+            echo "needs-docker=false" >> $GITHUB_OUTPUT
+            echo "needs-arm-emulation=true" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
+    - name: Prepare build environment
+      shell: bash
+      run: |
+        # Create output directory
+        mkdir -p "${{ inputs.output-dir }}"
+
+        # Write include-data-dirs to a temporary file to avoid shell escaping issues
+        echo '${{ inputs.include-data-dirs }}' > ${GITHUB_ACTION_PATH}/include_data_dirs.json
+
+    - name: Build for ARMv7 architecture
+      if: inputs.target-platform == 'linux-armv7'
+      uses: uraimo/run-on-arch-action@v3
+      with:
+        arch: armv7
+        # Use Ubuntu 20.04 because of missing libffi7 in 24.04 (cryptography requires it) and better compatibility with GLIBC
+        distro: ubuntu20.04
+        shell: /bin/bash
+        githubToken: ${{ github.token }}
+        setup: mkdir -p "${PWD}/${{ inputs.output-dir }}"
+        dockerRunArgs: |
+          --volume "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}"
+          --volume "${GITHUB_ACTION_PATH}:/github/action"
+        install: |
+          apt-get update -y
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:deadsnakes/ppa
+          apt-get update -y
+          apt-get install --ignore-missing -y curl python${{ inputs.python-version }} python${{ inputs.python-version }}-dev pkg-config gcc g++ patchelf binutils zlib1g-dev ${{ inputs.additional-arm-packages }}
+          # Install pip for requested Python version using get-pip.py as ensurepip does not work here
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python${{ inputs.python-version }}
+          python${{ inputs.python-version }} -m pip install --upgrade pip setuptools wheel
+        run: |
+          adduser --disabled-password --gecos "" builder
+          chmod -R a+rwx /home/runner/work
+          su builder <<'EOF'
+          export PATH=$PATH:/home/builder/.local/bin
+
+          # Setup environment using helper script
+          /github/action/setup_environment.sh \
+            "python${{ inputs.python-version }}" \
+            "${{ inputs.pyinstaller-version }}" \
+            "${{ inputs.pip-extra-index-url }}" \
+            "${{ inputs.install-deps-command }}"
+
+          # Write include-data-dirs to a temporary file to avoid shell escaping issues
+          echo '${{ inputs.include-data-dirs }}' > /tmp/include_data_dirs.json
+
+          # Build each file using the script
+          export GITHUB_ACTION_PATH=/github/action
+          /github/action/build_with_pyinstaller.sh \
+            "python${{ inputs.python-version }}" \
+            "${{ inputs.target-platform }}" \
+            "${{ inputs.output-dir }}" \
+            "${{ inputs.scripts }}" \
+            "${{ inputs.script-name }}" \
+            "" \
+            "/tmp/include_data_dirs.json" \
+            "${{ steps.setup-platform.outputs.data-separator }}" \
+            "${{ inputs.additional-args }}"
+
+          # Test binaries using helper script
+          /github/action/test_executables.sh \
+            "${{ inputs.scripts }}" \
+            "${{ inputs.script-name }}" \
+            "${{ inputs.output-dir }}" \
+            "${{ steps.setup-platform.outputs.exe-extension }}" \
+            "${{ inputs.test-command-args }}"
+          EOF
+
+    - name: Build for Linux (Docker)
+      # Running in Docker to link older versions of GLIBC, because the GitHub runners don't offer ubuntu 20.04 anymore
+      if: steps.setup-platform.outputs.needs-docker == 'true'
+      shell: bash
+      run: |
+        docker run --rm \
+          -v "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}" \
+          -v "${GITHUB_ACTION_PATH}:/github/action" \
+          -v "${GITHUB_WORKSPACE}:/${GITHUB_WORKSPACE}" \
+          -w ${GITHUB_WORKSPACE} \
+          ubuntu:20.04 \
+          bash -c "
+          apt-get update -y &&
+          apt-get install -y software-properties-common curl &&
+          add-apt-repository -y ppa:deadsnakes/ppa &&
+          apt-get update -y &&
+          apt-get install -y python${{ inputs.python-version }} python${{ inputs.python-version }}-dev pkg-config gcc g++ patchelf binutils zlib1g-dev &&
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python${{ inputs.python-version }} &&
+          python${{ inputs.python-version }} -m pip install --upgrade pip setuptools wheel &&
+
+          export GITHUB_ACTION_PATH=/github/action &&
+          /github/action/setup_environment.sh \
+            'python${{ inputs.python-version }}' \
+            '${{ inputs.pyinstaller-version }}' \
+            '${{ inputs.pip-extra-index-url }}' \
+            '${{ inputs.install-deps-command }}' &&
+
+          # Execute the build script
+          /github/action/build_with_pyinstaller.sh 'python${{ inputs.python-version }}' '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '/github/action/include_data_dirs.json' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
+          "
+
+    - name: Setup environment (Native platforms)
+      if: |
+        steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
+      shell: bash
+      run: |
+        $GITHUB_ACTION_PATH/setup_environment.sh \
+          'python' \
+          '${{ inputs.pyinstaller-version }}' \
+          '${{ inputs.pip-extra-index-url }}' \
+          '${{ inputs.install-deps-command }}'
+
+    - name: Build with PyInstaller (Native platforms)
+      if: |
+        steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
+      id: build
+      shell: bash
+      run: |
+        $GITHUB_ACTION_PATH/build_with_pyinstaller.sh 'python' '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
+
+        echo "success=true" >> $GITHUB_OUTPUT
+
+    - name: Verify builds
+      if: steps.setup-platform.outputs.needs-arm-emulation == 'false'
+      shell: bash
+      run: |-
+        $GITHUB_ACTION_PATH/test_executables.sh \
+          "${{ inputs.scripts }}" \
+          "${{ inputs.script-name }}" \
+          "${{ inputs.output-dir }}" \
+          "${{ steps.setup-platform.outputs.exe-extension }}" \
+          "${{ inputs.test-command-args }}"
+
+    - name: Sign binaries
+      if: inputs.target-platform == 'windows-amd64'
+      env:
+        CERTIFICATE: ${{ inputs.certificate }}
+        CERTIFICATE_PASSWORD: ${{ inputs.certificate-password }}
+      shell: pwsh
+      run: |-
+        if ([string]::IsNullOrEmpty($env:CERTIFICATE)) {
+          Write-Host "::warning title=Signing::Certificate is not set, skipping signing"
+          exit 0
+        }
+
+        $pythonFiles = "${{ inputs.scripts }}".Split(' ')
+        foreach ($file in $pythonFiles) {
+          $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file)
+          $executable = "./${{ inputs.output-dir }}/${baseName}${{ steps.setup-platform.outputs.exe-extension }}"
+          & (Join-Path $env:GITHUB_ACTION_PATH "Sign-File.ps1") -Path $executable
+        }
