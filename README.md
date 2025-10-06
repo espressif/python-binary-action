@@ -271,8 +271,8 @@ jobs:
 | `python-version`          | Python version to use for building        | `"3.13"`                                    | `"3.12"`                                     |
 | `pyinstaller-version`     | PyInstaller version to install            | `6.11.1`                                    | `""` (use latest)                            |
 | `additional-args`         | Additional PyInstaller arguments          | `""`                                        | `"--hidden-import=module"`                   |
-| `pip-extra-index-url`     | Extra pip index URL                       | `https://dl.espressif.com/pypi`             | `""`                                         |
-| `install-deps-command`    | Command to install project dependencies   | `"pip install --user --prefer-binary -e ."` | `"pip install -r requirements.txt"`          |
+| `pip-extra-index-url`     | Extra Python package index URL            | `https://dl.espressif.com/pypi`             | `""`                                         |
+| `install-deps-command`    | Command to install project dependencies   | `"uv pip install -e ."`                     | `"uv pip install -r requirements.txt"`       |
 | `additional-arm-packages` | ARMv7 ONLY: Additional system packages    | `""`                                        | `"openssl libffi-dev"`                       |
 | `test-command-args`       | Command arguments to test executables     | `"--help"`                                  | `"--version"`                                |
 | `certificate`             | Certificate to use for signing binaries   | `""`                                        | `${{ secrets.CERTIFICATE }}`                 |

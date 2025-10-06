@@ -1,34 +1,33 @@
 #!/bin/bash
 
 # Setup Python environment for PyInstaller builds
-# Usage: ./setup_environment.sh [python_version] [pyinstaller_version] [pip_extra_index_url] [install_deps_command]
+# Usage: ./setup_environment.sh [pyinstaller_version] [extra_index_url] [install_deps_command]
 
 set -e
 
-PYTHON_VERSION="${1:-python}"
-PYINSTALLER_VERSION="${2:-6.11.1}"
-PIP_EXTRA_INDEX_URL="${3:-}"
-INSTALL_DEPS_COMMAND="${4:-pip install --user --prefer-binary -e .}"
+PYINSTALLER_VERSION="${1:-6.11.1}"
+EXTRA_INDEX_URL="${2:-}"
+INSTALL_DEPS_COMMAND="${3:-uv pip install -e .}"
 
 echo "Setting up Python environment..."
-echo "Python version: $PYTHON_VERSION"
 echo "PyInstaller version: $PYINSTALLER_VERSION"
 
-# Set pip extra index if provided
-if [ -n "$PIP_EXTRA_INDEX_URL" ]; then
-    export PIP_EXTRA_INDEX_URL="$PIP_EXTRA_INDEX_URL"
-    echo "Using extra pip index: $PIP_EXTRA_INDEX_URL"
+# Set Python package extra index if provided
+if [ -n "$EXTRA_INDEX_URL" ]; then
+    export UV_INDEX="$EXTRA_INDEX_URL"
+    export UV_INDEX_STRATEGY="unsafe-best-match"
+    echo "Using extra Python package index: $EXTRA_INDEX_URL"
 fi
 
 # Install PyInstaller
 if [ -z "$PYINSTALLER_VERSION" ]; then
-    $PYTHON_VERSION -m pip install pyinstaller
+    uv pip install pyinstaller
 else
-    $PYTHON_VERSION -m pip install pyinstaller==$PYINSTALLER_VERSION
+    uv pip install pyinstaller==$PYINSTALLER_VERSION
 fi
 
 # Install dependencies
 echo "Installing project dependencies..."
-$PYTHON_VERSION -m $INSTALL_DEPS_COMMAND
+$INSTALL_DEPS_COMMAND
 
 echo "Environment setup completed successfully"

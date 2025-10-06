@@ -1,23 +1,21 @@
 #!/bin/bash
 
 # Build Python scripts with PyInstaller
-# Usage: ./build_with_pyinstaller.sh [python_version] [target_platform] [output_dir] [scripts] [script_names] [icon_file] [include_data_dirs] [data_separator] [additional_args]
+# Usage: ./build_with_pyinstaller.sh [target_platform] [output_dir] [scripts] [script_names] [icon_file] [include_data_dirs] [data_separator] [additional_args]
 
 set -e
 
 # Parse arguments
-PYTHON_VERSION="${1:-python}"
-TARGET_PLATFORM="${2}"
-OUTPUT_DIR="${3}"
-SCRIPTS="${4}"
-SCRIPT_NAMES="${5}"
-ICON_FILE="${6}"
-INCLUDE_DATA_DIRS="${7}"
-DATA_SEPARATOR="${8}"
-ADDITIONAL_ARGS="${9}"
+TARGET_PLATFORM="${1}"
+OUTPUT_DIR="${2}"
+SCRIPTS="${3}"
+SCRIPT_NAMES="${4}"
+ICON_FILE="${5}"
+INCLUDE_DATA_DIRS="${6}"
+DATA_SEPARATOR="${7}"
+ADDITIONAL_ARGS="${8}"
 
 echo "Building with PyInstaller..."
-echo "Python version: $PYTHON_VERSION"
 echo "Target platform: $TARGET_PLATFORM"
 echo "Output directory: $OUTPUT_DIR"
 echo "Scripts: $SCRIPTS"
@@ -32,7 +30,7 @@ for i in "${!PYTHON_FILES[@]}"; do
   echo "Building $file for $TARGET_PLATFORM..."
 
   # Start building the command
-  cmd="$PYTHON_VERSION -m PyInstaller --onefile --distpath=$OUTPUT_DIR"
+  cmd="uv run pyinstaller --onefile --distpath=$OUTPUT_DIR"
 
   # Add custom name if provided
   if [ -n "$SCRIPT_NAMES" ] && [ $i -lt ${#SCRIPT_NAMES_ARRAY[@]} ]; then
@@ -51,7 +49,7 @@ for i in "${!PYTHON_FILES[@]}"; do
   # Add include-data-dirs using Python script
   if [ -n "$INCLUDE_DATA_DIRS" ]; then
     echo "Processing include-data-dirs for $file..."
-    include_flags=$($PYTHON_VERSION $GITHUB_ACTION_PATH/process_include_dirs.py "$INCLUDE_DATA_DIRS" "$DATA_SEPARATOR" "$file")
+    include_flags=$(uv run python $GITHUB_ACTION_PATH/process_include_dirs.py "$INCLUDE_DATA_DIRS" "$DATA_SEPARATOR" "$file")
     echo "Include flags result: '$include_flags'"
     if [ -n "$include_flags" ]; then
       cmd="$cmd $include_flags"

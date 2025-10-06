@@ -43,14 +43,14 @@ inputs:
     required: false
     default: ''
   pip-extra-index-url:
-    description: Extra pip index URL
+    description: Extra Python Package Index URL
     required: false
     default: https://dl.espressif.com/pypi
   install-deps-command:
     description: Command to install project dependencies. Command will be executed
-      like `python -m {install-deps-command}`
+      like `uv pip install {install-deps-command}`
     required: false
-    default: pip install --user --prefer-binary -e .
+    default: uv pip install -e .
   additional-arm-packages:
     description: 'ARMv7 ONLY: Additional system packages to install (space-separated).
       e.g. for cryptography: openssl libffi-dev libffi7 libssl-dev'
@@ -137,22 +137,24 @@ runs:
           export DEBIAN_FRONTEND=noninteractive
           export TZ=UTC
           apt-get update -y
-          apt-get install -y software-properties-common
-          add-apt-repository -y ppa:deadsnakes/ppa
-          apt-get update -y
-          apt-get install --ignore-missing -y curl python${{ inputs.python-version }} python${{ inputs.python-version }}-dev pkg-config gcc g++ patchelf binutils zlib1g-dev ${{ inputs.additional-arm-packages }}
-          # Install pip for requested Python version using get-pip.py as ensurepip does not work here
-          curl -sS https://bootstrap.pypa.io/get-pip.py | python${{ inputs.python-version }}
-          python${{ inputs.python-version }} -m pip install --upgrade pip setuptools wheel
+          apt-get install -y curl git build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev pkg-config gcc g++ patchelf binutils ${{ inputs.additional-arm-packages }}
         run: |
           adduser --disabled-password --gecos "" builder
           chmod -R a+rwx /home/runner/work
           su builder <<'EOF'
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          source $HOME/.local/bin/env
+          # Install Python version using uv
+          uv python install ${{ inputs.python-version }}
+          # Create and activate virtual environment
+          uv venv
+          source .venv/bin/activate
+          # Install UV and upgrade tools
+          uv pip install --upgrade setuptools wheel
           export PATH=$PATH:/home/builder/.local/bin
 
           # Setup environment using helper script
           /github/action/setup_environment.sh \
-            "python${{ inputs.python-version }}" \
             "${{ inputs.pyinstaller-version }}" \
             "${{ inputs.pip-extra-index-url }}" \
             "${{ inputs.install-deps-command }}"
@@ -163,7 +165,6 @@ runs:
           # Build each file using the script
           export GITHUB_ACTION_PATH=/github/action
           /github/action/build_with_pyinstaller.sh \
-            "python${{ inputs.python-version }}" \
             "${{ inputs.target-platform }}" \
             "${{ inputs.output-dir }}" \
             "${{ inputs.scripts }}" \
@@ -197,31 +198,48 @@ runs:
           export DEBIAN_FRONTEND=noninteractive &&
           export TZ=UTC &&
           apt-get update -y &&
-          apt-get install -y software-properties-common curl &&
-          add-apt-repository -y ppa:deadsnakes/ppa &&
-          apt-get update -y &&
-          apt-get install -y python${{ inputs.python-version }} python${{ inputs.python-version }}-dev pkg-config gcc g++ patchelf binutils zlib1g-dev &&
-          curl -sS https://bootstrap.pypa.io/get-pip.py | python${{ inputs.python-version }} &&
-          python${{ inputs.python-version }} -m pip install --upgrade pip setuptools wheel &&
+          apt-get install -y curl git build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev pkg-config gcc g++ patchelf binutils &&
+          curl -LsSf https://astral.sh/uv/install.sh | sh &&
+          source /root/.local/bin/env &&
+          # Install Python version using uv
+          uv python install ${{ inputs.python-version }} &&
+          # Create and activate virtual environment
+          uv venv &&
+          source .venv/bin/activate &&
+          # Install UV and upgrade tools
+          uv pip install --upgrade setuptools wheel &&
 
           export GITHUB_ACTION_PATH=/github/action &&
           /github/action/setup_environment.sh \
-            'python${{ inputs.python-version }}' \
             '${{ inputs.pyinstaller-version }}' \
             '${{ inputs.pip-extra-index-url }}' \
             '${{ inputs.install-deps-command }}' &&
 
           # Execute the build script
-          /github/action/build_with_pyinstaller.sh 'python${{ inputs.python-version }}' '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '/github/action/include_data_dirs.json' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
+          /github/action/build_with_pyinstaller.sh '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '/github/action/include_data_dirs.json' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
           "
+
+    - name: Install UV
+      if: |
+        steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
 
     - name: Setup environment (Native platforms)
       if: |
         steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
       shell: bash
       run: |
+        # Create and activate virtual environment
+        uv venv
+        if [ "${{ inputs.target-platform }}" == 'windows-amd64' ]; then
+          source .venv\\Scripts\\activate
+        else
+          source .venv/bin/activate
+        fi
+
         $GITHUB_ACTION_PATH/setup_environment.sh \
-          'python' \
           '${{ inputs.pyinstaller-version }}' \
           '${{ inputs.pip-extra-index-url }}' \
           '${{ inputs.install-deps-command }}'
@@ -232,7 +250,7 @@ runs:
       id: build
       shell: bash
       run: |
-        $GITHUB_ACTION_PATH/build_with_pyinstaller.sh 'python' '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
+        $GITHUB_ACTION_PATH/build_with_pyinstaller.sh '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
 
         echo "success=true" >> $GITHUB_OUTPUT
 
