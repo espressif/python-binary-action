@@ -134,6 +134,8 @@ runs:
           --volume "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}"
           --volume "${GITHUB_ACTION_PATH}:/github/action"
         install: |
+          export DEBIAN_FRONTEND=noninteractive
+          export TZ=UTC
           apt-get update -y
           apt-get install -y software-properties-common
           add-apt-repository -y ppa:deadsnakes/ppa
@@ -192,6 +194,8 @@ runs:
           -w ${GITHUB_WORKSPACE} \
           ubuntu:20.04 \
           bash -c "
+          export DEBIAN_FRONTEND=noninteractive &&
+          export TZ=UTC &&
           apt-get update -y &&
           apt-get install -y software-properties-common curl &&
           add-apt-repository -y ppa:deadsnakes/ppa &&
