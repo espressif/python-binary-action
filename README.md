@@ -166,10 +166,11 @@ Building the project with default configuration will result in script name `__ma
 
 ### Signing Windows Binaries
 
-If you would like to sign Windows binaries, you can set `certificate` and the action will also take care of signing all binaries.
-It is also recommended to use `certificate-password`.
+If you would like to sign Windows binaries, you can configure Azure Key Vault credentials and the action will automatically sign all binaries after building. Signing is only performed for `windows-amd64` platform builds.
 
-The `certificate` should be a PFX (Personal Information Exchange) certificate file encoded in base64 format.
+The action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action internally, which requires Azure credentials to access a certificate stored in Azure Key Vault. If the Azure client secret is not set, signing will be skipped with a warning message.
+
+To enable signing, you must explicitly pass the Azure credentials as inputs from your workflow. Set the following secrets in your repository and pass them to the action:
 
 ```yaml
 - name: Build Python executable
@@ -178,8 +179,12 @@ The `certificate` should be a PFX (Personal Information Exchange) certificate fi
     scripts: 'app.py'
     output-dir: './dist'
     target-platform: 'windows-amd64'
-    certificate: ${{ secrets.CERTIFICATE }}
-    certificate-password: ${{ secrets.CERTIFICATE_PASSWORD }}
+    # Azure credentials for signing (must be explicitly passed)
+    azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+    azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    azure-keyvault-uri: ${{ secrets.AZURE_KEYVAULT_URI }}
+    azure-keyvault-cert-name: ${{ secrets.AZURE_KEYVAULT_CERT_NAME }}
 ```
 
 ### Complete Workflow
@@ -275,11 +280,23 @@ jobs:
 | `install-deps-command`    | Command to install project dependencies   | `"uv pip install -e ."`                     | `"uv pip install -r requirements.txt"`       |
 | `additional-arm-packages` | ARMv7 ONLY: Additional system packages    | `""`                                        | `"openssl libffi-dev"`                       |
 | `test-command-args`       | Command arguments to test executables     | `"--help"`                                  | `"--version"`                                |
-| `certificate`             | Certificate to use for signing binaries   | `""`                                        | `${{ secrets.CERTIFICATE }}`                 |
-| `certificate-password`    | Password for the certificate              | `""`                                        | `${{ secrets.CERTIFICATE_PASSWORD }}`        |
 
 > [!IMPORTANT]
 > Be careful when changing `pyinstaller-version` as it might lead to increased false positives with anti-virus software. It is recommended to check your executables with antivirus software such as [Virustotal](https://www.virustotal.com/gui/home/upload).
+
+### Optional Inputs for Signing Binaries
+
+For signing binaries on Windows, this action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action. The following inputs are optional but required if you want to sign your Windows executables.
+
+Signing is optional but strongly recommended. The action will produce a warning if a Windows executable was built but was not signed.
+
+| Input                     | Description                      | Default  | Example                                   |
+|---------------------------|----------------------------------|----------|-------------------------------------------|
+| `azure-client-id`         | Azure client ID for signing      | `""`     | `${{ secrets.AZURE_CLIENT_ID }}`          |
+| `azure-client-secret`     | Azure client secret for signing  | `""`     | `${{ secrets.AZURE_CLIENT_SECRET }}`      |
+| `azure-tenant-id`         | Azure tenant ID for signing      | `""`     | `${{ secrets.AZURE_TENANT_ID }}`          |
+| `azure-keyvault-uri`      | Azure key vault URI for signing  | `""`     | `${{ secrets.AZURE_KEYVAULT_URI }}`       |
+| `azure-keyvault-cert-name`| Azure key vault certificate name | `""`     | `${{ secrets.AZURE_KEYVAULT_CERT_NAME }}` |
 
 ## Outputs
 
