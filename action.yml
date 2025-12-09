@@ -60,12 +60,24 @@ inputs:
     description: Command arguments to test binaries (e.g. "--help")
     required: false
     default: --help
-  certificate:
-    description: Certificate to use for signing binaries
+  azure-client-id:
+    description: Azure client ID for espressif/release-sign action
     required: false
     default: ''
-  certificate-password:
-    description: Password for the certificate
+  azure-client-secret:
+    description: Azure client secret for espressif/release-sign action
+    required: false
+    default: ''
+  azure-tenant-id:
+    description: Azure tenant ID for espressif/release-sign action
+    required: false
+    default: ''
+  azure-keyvault-uri:
+    description: Azure key vault URI for espressif/release-sign action
+    required: false
+    default: ''
+  azure-keyvault-cert-name:
+    description: Azure key vault certificate name for espressif/release-sign action
     required: false
     default: ''
 
@@ -265,21 +277,27 @@ runs:
           "${{ steps.setup-platform.outputs.exe-extension }}" \
           "${{ inputs.test-command-args }}"
 
-    - name: Sign binaries
-      if: inputs.target-platform == 'windows-amd64'
-      env:
-        CERTIFICATE: ${{ inputs.certificate }}
-        CERTIFICATE_PASSWORD: ${{ inputs.certificate-password }}
+    - name: Check signing certificate
+      if: |
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret == ''
       shell: pwsh
-      run: |-
-        if ([string]::IsNullOrEmpty($env:CERTIFICATE)) {
-          Write-Host "::warning title=Signing::Certificate is not set, skipping signing"
-          exit 0
-        }
+      run: |
+        Write-Host "::warning title=Signing::Azure client secret is not set, skipping signing"
 
-        $pythonFiles = "${{ inputs.scripts }}".Split(' ')
-        foreach ($file in $pythonFiles) {
-          $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file)
-          $executable = "./${{ inputs.output-dir }}/${baseName}${{ steps.setup-platform.outputs.exe-extension }}"
-          & (Join-Path $env:GITHUB_ACTION_PATH "Sign-File.ps1") -Path $executable
-        }
+    - name: Sign binaries
+      if: |
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != ''
+      uses: espressif/release-sign@master
+      with:
+        path: ${{ inputs.output-dir }}
+        azure-client-id: ${{ inputs.azure-client-id }}
+        azure-client-secret: ${{ inputs.azure-client-secret }}
+        azure-tenant-id: ${{ inputs.azure-tenant-id }}
+        azure-keyvault-uri: ${{ inputs.azure-keyvault-uri }}
+        azure-keyvault-cert-name: ${{ inputs.azure-keyvault-cert-name }}
+
+    - name: Remove leftover signature files
+      if: |
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != ''
+      shell: bash
+      run: find ./${{ inputs.output-dir }} -name "*.sig" -type f -delete
