@@ -305,6 +305,27 @@ Signing is optional but strongly recommended. The action will produce a warning 
 | `executable-extension` | File extension of built executables (e.g., `.exe` for Windows) |
 | `build-success`        | Whether the build was successful (`true`/`false`)              |
 
+## Known Limitations
+
+### Using `rich` Package
+
+When using this action to build a binary that depends on `rich` it is recommended to add the following to the inputs:
+
+```yaml
+with:
+  additional-args: "--collect-submodules=rich._unicode_data"
+```
+
+This is required for `rich>=14.3.0`, which introduced a new way of loading Unicode data.
+
+`rich` uses dynamic imports. As a result, `PyInstaller` cannot always identify these imports as required, and it might not include them in the built binary.
+
+Without the additional arguments to `PyInstaller`, executing the built binary might result in an error similar to the following:
+
+```txt
+ModuleNotFoundError: No module named 'rich._unicode_data.unicode17-0-0'
+```
+
 ## Notes
 
 - For 32-bit ARM architecture (linux-armv7), the action uses Docker containers to provide the necessary build environment
