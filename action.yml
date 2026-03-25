@@ -52,8 +52,9 @@ inputs:
     required: false
     default: uv pip install -e .
   additional-arm-packages:
-    description: 'ARMv7 ONLY: Additional system packages to install (space-separated).
-      e.g. for cryptography: openssl libffi-dev libffi7 libssl-dev'
+    description: 'ARMv7 ONLY: Optional extra apt packages (space-separated). The Espressif
+      idf-python-wheels-armv7l image already includes build tools, libffi-dev, libssl-dev,
+      patchelf, etc.; omit this unless you need more.'
     required: false
     default: ''
   test-command-args:
@@ -132,68 +133,50 @@ runs:
         # Write include-data-dirs to a temporary file to avoid shell escaping issues
         echo '${{ inputs.include-data-dirs }}' > ${GITHUB_ACTION_PATH}/include_data_dirs.json
 
+    - name: Set up QEMU for ARMv7 Docker
+      if: inputs.target-platform == 'linux-armv7'
+      uses: docker/setup-qemu-action@v3
+
     - name: Build for ARMv7 architecture
       if: inputs.target-platform == 'linux-armv7'
-      uses: uraimo/run-on-arch-action@v3
-      with:
-        arch: armv7
-        # Use Ubuntu 20.04 because of missing libffi7 in 24.04 (cryptography requires it) and better compatibility with GLIBC
-        distro: ubuntu20.04
-        shell: /bin/bash
-        githubToken: ${{ github.token }}
-        setup: mkdir -p "${PWD}/${{ inputs.output-dir }}"
-        dockerRunArgs: |
-          --volume "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}"
-          --volume "${GITHUB_ACTION_PATH}:/github/action"
-        install: |
-          export DEBIAN_FRONTEND=noninteractive
-          export TZ=UTC
-          apt-get update -y
-          apt-get install -y curl git build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev pkg-config gcc g++ patchelf binutils ${{ inputs.additional-arm-packages }}
-        run: |
-          adduser --disabled-password --gecos "" builder
-          chmod -R a+rwx /home/runner/work
-          su builder <<'EOF'
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          source $HOME/.local/bin/env
-          # Install Python version using uv
-          uv python install ${{ inputs.python-version }}
-          # Create and activate virtual environment
-          uv venv
-          source .venv/bin/activate
-          # Install UV and upgrade tools
-          uv pip install --upgrade setuptools wheel
-          export PATH=$PATH:/home/builder/.local/bin
+      shell: bash
+      run: |
+        docker run --rm \
+          --platform linux/arm/v7 \
+          -v "${PWD}/${{ inputs.output-dir }}:/${{ inputs.output-dir }}" \
+          -v "${GITHUB_ACTION_PATH}:/github/action" \
+          -v "${GITHUB_WORKSPACE}:/${GITHUB_WORKSPACE}" \
+          -w ${GITHUB_WORKSPACE} \
+          ghcr.io/espressif/github-esp-dockerfiles/idf-python-wheels-armv7l:v1 \
+          bash -c "
+          export DEBIAN_FRONTEND=noninteractive &&
+          export TZ=UTC &&
+          if [ -n '${{ inputs.additional-arm-packages }}' ]; then
+            apt-get update -y &&
+            apt-get install -y ${{ inputs.additional-arm-packages }}
+          fi &&
+          curl -LsSf https://astral.sh/uv/install.sh | sh &&
+          source /root/.local/bin/env &&
+          uv python install ${{ inputs.python-version }} &&
+          uv venv &&
+          source .venv/bin/activate &&
+          uv pip install --upgrade setuptools wheel &&
 
-          # Setup environment using helper script
+          export GITHUB_ACTION_PATH=/github/action &&
           /github/action/setup_environment.sh \
-            "${{ inputs.pyinstaller-version }}" \
-            "${{ inputs.pip-extra-index-url }}" \
-            "${{ inputs.install-deps-command }}"
+            '${{ inputs.pyinstaller-version }}' \
+            '${{ inputs.pip-extra-index-url }}' \
+            '${{ inputs.install-deps-command }}' &&
 
-          # Write include-data-dirs to a temporary file to avoid shell escaping issues
-          echo '${{ inputs.include-data-dirs }}' > /tmp/include_data_dirs.json
+          /github/action/build_with_pyinstaller.sh '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '/github/action/include_data_dirs.json' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}' &&
 
-          # Build each file using the script
-          export GITHUB_ACTION_PATH=/github/action
-          /github/action/build_with_pyinstaller.sh \
-            "${{ inputs.target-platform }}" \
-            "${{ inputs.output-dir }}" \
-            "${{ inputs.scripts }}" \
-            "${{ inputs.script-name }}" \
-            "" \
-            "/tmp/include_data_dirs.json" \
-            "${{ steps.setup-platform.outputs.data-separator }}" \
-            "${{ inputs.additional-args }}"
-
-          # Test binaries using helper script
           /github/action/test_executables.sh \
-            "${{ inputs.scripts }}" \
-            "${{ inputs.script-name }}" \
-            "${{ inputs.output-dir }}" \
-            "${{ steps.setup-platform.outputs.exe-extension }}" \
-            "${{ inputs.test-command-args }}"
-          EOF
+            '${{ inputs.scripts }}' \
+            '${{ inputs.script-name }}' \
+            '${{ inputs.output-dir }}' \
+            '${{ steps.setup-platform.outputs.exe-extension }}' \
+            '${{ inputs.test-command-args }}'
+          "
 
     - name: Build for Linux (Docker)
       # Running in Docker to link older versions of GLIBC, because the GitHub runners don't offer ubuntu 20.04 anymore
