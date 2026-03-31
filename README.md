@@ -139,6 +139,10 @@ Building the project with default configuration will result in script name `__ma
 
 ### ARM Architecture Build
 
+
+The ARMv7 build image already includes most of the required system packages by default. However, if you need to add extra system packages, you can do so as shown in the example below.
+For more details about the ARMv7 image, refer to its [Dockerfile definition](https://github.com/espressif/github-esp-dockerfiles/blob/master/idf_python_wheels_legacy/Dockerfile).
+
 ```yaml
 - name: Build for ARMv7
   uses: espressif/python-binary-action@master
@@ -146,7 +150,7 @@ Building the project with default configuration will result in script name `__ma
     scripts: 'main.py'
     output-dir: './arm-binaries'
     target-platform: 'linux-armv7'
-    additional-arm-packages: 'openssl libffi-dev libffi7 libssl-dev'
+    additional-arm-packages: 'openssl libffi-dev'
     python-version: '3.11'
 ```
 
@@ -278,7 +282,7 @@ jobs:
 | `additional-args`         | Additional PyInstaller arguments          | `""`                                        | `"--hidden-import=module"`                   |
 | `pip-extra-index-url`     | Extra Python package index URL            | `https://dl.espressif.com/pypi`             | `""`                                         |
 | `install-deps-command`    | Command to install project dependencies   | `"uv pip install -e ."`                     | `"uv pip install -r requirements.txt"`       |
-| `additional-arm-packages` | ARMv7 ONLY: Additional system packages    | `""`                                        | `"openssl libffi-dev"`                       |
+| `additional-arm-packages` | ARMv7 ONLY: Extra apt packages (the Espressif ARMv7 image already ships most build deps) | `""`          | `"openssl libssl-dev"`                       |
 | `test-command-args`       | Command arguments to test executables     | `"--help"`                                  | `"--version"`                                |
 
 > [!IMPORTANT]
