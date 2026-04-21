@@ -174,6 +174,9 @@ If you would like to sign Windows binaries, you can configure Azure Key Vault cr
 
 The action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action internally, which requires Azure credentials to access a certificate stored in Azure Key Vault. If the Azure client secret is not set, signing will be skipped with a warning message.
 
+> [!NOTE]
+> Signing only runs on `push` and `release` events within the `espressif` GitHub organization. Pull request builds will compile and test the binary but skip signing, even if Azure credentials are provided. This ensures only reviewed and merged code is signed.
+
 To enable signing, you must explicitly pass the Azure credentials as inputs from your workflow. Set the following secrets in your repository and pass them to the action:
 
 ```yaml

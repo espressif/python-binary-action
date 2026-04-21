@@ -262,14 +262,16 @@ runs:
 
     - name: Check signing certificate
       if: |
-        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret == ''
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret == '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
       shell: pwsh
       run: |
         Write-Host "::warning title=Signing::Azure client secret is not set, skipping signing"
 
     - name: Sign binaries
       if: |
-        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != ''
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
       uses: espressif/release-sign@master
       with:
         path: ${{ inputs.output-dir }}
@@ -281,6 +283,7 @@ runs:
 
     - name: Remove leftover signature files
       if: |
-        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != ''
+        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
       shell: bash
       run: find ./${{ inputs.output-dir }} -name "*.sig" -type f -delete
