@@ -81,6 +81,35 @@ inputs:
     description: Azure key vault certificate name for espressif/release-sign action
     required: false
     default: ''
+  macos-signing-identity:
+    description: macOS code signing identity for espressif/release-sign action (e.g.
+      "Developer ID Application Name (TEAM_ID)")
+    required: false
+    default: ''
+  macos-certificate:
+    description: Base64-encoded .p12 certificate for macOS code signing (espressif/release-sign)
+    required: false
+    default: ''
+  macos-certificate-pwd:
+    description: Password for the macOS .p12 certificate (espressif/release-sign)
+    required: false
+    default: ''
+  macos-entitlements:
+    description: Path to entitlements file for codesign (espressif/release-sign, optional)
+    required: false
+    default: ''
+  notarization-username:
+    description: Apple ID for notarization (espressif/release-sign)
+    required: false
+    default: ''
+  notarization-password:
+    description: App-specific password for notarization (espressif/release-sign)
+    required: false
+    default: ''
+  notarization-team-id:
+    description: Apple Team ID for notarization (espressif/release-sign)
+    required: false
+    default: ''
 
 outputs:
   executable-extension:
@@ -268,9 +297,21 @@ runs:
       run: |
         Write-Host "::warning title=Signing::Azure client secret is not set, skipping signing"
 
+    - name: Check macOS signing certificate
+      if: |
+        (inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') &&
+        inputs.macos-certificate == '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
+      shell: bash
+      run: |
+        echo "::warning title=Signing::macOS certificate is not set, skipping signing"
+
     - name: Sign binaries
       if: |
-        inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != '' &&
+        (
+          (inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != '') ||
+          ((inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') && inputs.macos-certificate != '')
+        ) &&
         (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
       uses: espressif/release-sign@master
       with:
@@ -280,6 +321,13 @@ runs:
         azure-tenant-id: ${{ inputs.azure-tenant-id }}
         azure-keyvault-uri: ${{ inputs.azure-keyvault-uri }}
         azure-keyvault-cert-name: ${{ inputs.azure-keyvault-cert-name }}
+        macos-signing-identity: ${{ inputs.macos-signing-identity }}
+        macos-certificate: ${{ inputs.macos-certificate }}
+        macos-certificate-pwd: ${{ inputs.macos-certificate-pwd }}
+        macos-entitlements: ${{ inputs.macos-entitlements }}
+        notarization-username: ${{ inputs.notarization-username }}
+        notarization-password: ${{ inputs.notarization-password }}
+        notarization-team-id: ${{ inputs.notarization-team-id }}
 
     - name: Remove leftover signature files
       if: |
