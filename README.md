@@ -175,7 +175,7 @@ If you would like to sign Windows binaries, you can configure Azure Key Vault cr
 The action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action internally, which requires Azure credentials to access a certificate stored in Azure Key Vault. If the Azure client secret is not set, signing will be skipped with a warning message.
 
 > [!NOTE]
-> Signing only runs on `push` and `release` events within the `espressif` GitHub organization. Pull request builds will compile and test the binary but skip signing, even if Azure credentials are provided. This ensures only reviewed and merged code is signed.
+> Signing only runs on `push` and `release` events within the `espressif` GitHub organization. Pull request builds will compile and test the binary but skip signing, even if signing credentials are provided. This ensures only reviewed and merged code is signed.
 
 To enable signing, you must explicitly pass the Azure credentials as inputs from your workflow. Set the following secrets in your repository and pass them to the action:
 
@@ -192,6 +192,29 @@ To enable signing, you must explicitly pass the Azure credentials as inputs from
     azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
     azure-keyvault-uri: ${{ secrets.AZURE_KEYVAULT_URI }}
     azure-keyvault-cert-name: ${{ secrets.AZURE_KEYVAULT_CERT_NAME }}
+```
+
+### Signing macOS Binaries
+
+For `macos-amd64` and `macos-arm64` builds on macOS runners, you can sign and optionally notarize binaries using the same [espressif/release-sign](https://github.com/espressif/release-sign) action. If the macOS certificate is not set, signing will be skipped with a warning message.
+
+To enable signing, pass a base64-encoded Developer ID `.p12` certificate and related credentials from your workflow secrets:
+
+```yaml
+- name: Build Python executable
+  uses: espressif/python-binary-action@master
+  with:
+    scripts: 'app.py'
+    output-dir: './dist'
+    target-platform: 'macos-arm64'
+    macos-signing-identity: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+    macos-certificate: ${{ secrets.MACOS_CERTIFICATE }}
+    macos-certificate-pwd: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+    # Optional: entitlements and notarization
+    macos-entitlements: ./entitlements.plist
+    notarization-username: ${{ secrets.NOTARIZATION_USERNAME }}
+    notarization-password: ${{ secrets.NOTARIZATION_PASSWORD }}
+    notarization-team-id: ${{ secrets.NOTARIZATION_TEAM_ID }}
 ```
 
 ### Complete Workflow
@@ -293,17 +316,24 @@ jobs:
 
 ### Optional Inputs for Signing Binaries
 
-For signing binaries on Windows, this action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action. The following inputs are optional but required if you want to sign your Windows executables.
+This action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action for signing. Signing is optional but strongly recommended. The action will produce a warning if a Windows or macOS executable was built but was not signed.
 
-Signing is optional but strongly recommended. The action will produce a warning if a Windows executable was built but was not signed.
-
-| Input                     | Description                      | Default  | Example                                   |
-|---------------------------|----------------------------------|----------|-------------------------------------------|
-| `azure-client-id`         | Azure client ID for signing      | `""`     | `${{ secrets.AZURE_CLIENT_ID }}`          |
-| `azure-client-secret`     | Azure client secret for signing  | `""`     | `${{ secrets.AZURE_CLIENT_SECRET }}`      |
-| `azure-tenant-id`         | Azure tenant ID for signing      | `""`     | `${{ secrets.AZURE_TENANT_ID }}`          |
-| `azure-keyvault-uri`      | Azure key vault URI for signing  | `""`     | `${{ secrets.AZURE_KEYVAULT_URI }}`       |
-| `azure-keyvault-cert-name`| Azure key vault certificate name | `""`     | `${{ secrets.AZURE_KEYVAULT_CERT_NAME }}` |
+| Input                      | Description                      | Default | Example                                   |
+|----------------------------|----------------------------------|---------|-------------------------------------------|
+| **Windows**                |                                  |         |                                           |
+| `azure-client-id`          | Azure client ID for signing      | `""`    | `${{ secrets.AZURE_CLIENT_ID }}`          |
+| `azure-client-secret`      | Azure client secret for signing  | `""`    | `${{ secrets.AZURE_CLIENT_SECRET }}`      |
+| `azure-tenant-id`          | Azure tenant ID for signing      | `""`    | `${{ secrets.AZURE_TENANT_ID }}`          |
+| `azure-keyvault-uri`       | Azure key vault URI for signing  | `""`    | `${{ secrets.AZURE_KEYVAULT_URI }}`       |
+| `azure-keyvault-cert-name` | Azure key vault certificate name | `""`    | `${{ secrets.AZURE_KEYVAULT_CERT_NAME }}` |
+| **macOS**                  |                                  |         |                                           |
+| `macos-signing-identity`   | Code signing identity            | `""`    | `${{ secrets.MACOS_SIGNING_IDENTITY }}`   |
+| `macos-certificate`        | Base64-encoded .p12 certificate  | `""`    | `${{ secrets.MACOS_CERTIFICATE }}`        |
+| `macos-certificate-pwd`    | Password for .p12 certificate    | `""`    | `${{ secrets.MACOS_CERTIFICATE_PWD }}`    |
+| `macos-entitlements`       | Entitlements plist (optional)    | `""`    | `"./entitlements.plist"`                  |
+| `notarization-username`    | Apple ID for notarization        | `""`    | `${{ secrets.NOTARIZATION_USERNAME }}`    |
+| `notarization-password`    | App-specific password (optional) | `""`    | `${{ secrets.NOTARIZATION_PASSWORD }}`    |
+| `notarization-team-id`     | Apple Team ID (optional)         | `""`    | `${{ secrets.NOTARIZATION_TEAM_ID }}`     |
 
 ## Outputs
 
