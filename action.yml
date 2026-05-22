@@ -99,15 +99,18 @@ inputs:
     required: false
     default: ''
   notarization-username:
-    description: Apple ID for notarization (espressif/release-sign)
+    description: Apple ID for notarization (espressif/release-sign). Used only on
+      tag pushes.
     required: false
     default: ''
   notarization-password:
-    description: App-specific password for notarization (espressif/release-sign)
+    description: App-specific password for notarization (espressif/release-sign).
+      Used only on tag pushes.
     required: false
     default: ''
   notarization-team-id:
-    description: Apple Team ID for notarization (espressif/release-sign)
+    description: Apple Team ID for notarization (espressif/release-sign). Used only
+      on tag pushes.
     required: false
     default: ''
 
@@ -164,7 +167,7 @@ runs:
 
     - name: Set up QEMU for ARMv7 Docker
       if: inputs.target-platform == 'linux-armv7'
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@v4
 
     - name: Build for ARMv7 architecture
       if: inputs.target-platform == 'linux-armv7'
@@ -248,7 +251,7 @@ runs:
     - name: Install UV
       if: |
         steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v8
       with:
         enable-cache: true
 
@@ -327,9 +330,9 @@ runs:
         macos-certificate: ${{ inputs.macos-certificate }}
         macos-certificate-pwd: ${{ inputs.macos-certificate-pwd }}
         macos-entitlements: ${{ inputs.macos-entitlements }}
-        notarization-username: ${{ inputs.notarization-username }}
-        notarization-password: ${{ inputs.notarization-password }}
-        notarization-team-id: ${{ inputs.notarization-team-id }}
+        notarization-username: ${{ github.ref_type == 'tag' && inputs.notarization-username || '' }}
+        notarization-password: ${{ github.ref_type == 'tag' && inputs.notarization-password || '' }}
+        notarization-team-id: ${{ github.ref_type == 'tag' && inputs.notarization-team-id || '' }}
 
     - name: Remove leftover signature files
       if: |
