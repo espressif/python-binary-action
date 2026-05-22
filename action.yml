@@ -169,6 +169,8 @@ runs:
     - name: Build for ARMv7 architecture
       if: inputs.target-platform == 'linux-armv7'
       shell: bash
+      # Force `cryptography` to build from sdist on ARMv7: the published
+      # manylinux_2_31_armv7l wheel ships an OpenSSL mismatch.
       run: |
         docker run --rm \
           --platform linux/arm/v7 \
@@ -195,7 +197,7 @@ runs:
           /github/action/setup_environment.sh \
             '${{ inputs.pyinstaller-version }}' \
             '${{ inputs.pip-extra-index-url }}' \
-            '${{ inputs.install-deps-command }}' &&
+            '${{ inputs.install-deps-command }} --no-binary cryptography' &&
 
           /github/action/build_with_pyinstaller.sh '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '/github/action/include_data_dirs.json' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}' &&
 
