@@ -99,15 +99,18 @@ inputs:
     required: false
     default: ''
   notarization-username:
-    description: Apple ID for notarization (espressif/release-sign)
+    description: Apple ID for notarization (espressif/release-sign). Used only on
+      tag pushes.
     required: false
     default: ''
   notarization-password:
-    description: App-specific password for notarization (espressif/release-sign)
+    description: App-specific password for notarization (espressif/release-sign).
+      Used only on tag pushes.
     required: false
     default: ''
   notarization-team-id:
-    description: Apple Team ID for notarization (espressif/release-sign)
+    description: Apple Team ID for notarization (espressif/release-sign). Used only
+      on tag pushes.
     required: false
     default: ''
 
@@ -327,9 +330,9 @@ runs:
         macos-certificate: ${{ inputs.macos-certificate }}
         macos-certificate-pwd: ${{ inputs.macos-certificate-pwd }}
         macos-entitlements: ${{ inputs.macos-entitlements }}
-        notarization-username: ${{ inputs.notarization-username }}
-        notarization-password: ${{ inputs.notarization-password }}
-        notarization-team-id: ${{ inputs.notarization-team-id }}
+        notarization-username: ${{ github.ref_type == 'tag' && inputs.notarization-username || '' }}
+        notarization-password: ${{ github.ref_type == 'tag' && inputs.notarization-password || '' }}
+        notarization-team-id: ${{ github.ref_type == 'tag' && inputs.notarization-team-id || '' }}
 
     - name: Remove leftover signature files
       if: |
