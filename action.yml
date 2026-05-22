@@ -251,7 +251,7 @@ runs:
     - name: Install UV
       if: |
         steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
-      uses: astral-sh/setup-uv@v8
+      uses: astral-sh/setup-uv@v8.1.0
       with:
         enable-cache: true
 
