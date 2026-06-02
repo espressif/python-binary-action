@@ -46,6 +46,16 @@ for i in "${!PYTHON_FILES[@]}"; do
     fi
   fi
 
+  # macOS: sign embedded libraries during collection (required for signed onefile binaries)
+  if [[ "$TARGET_PLATFORM" == macos-* ]] && [ -n "${MACOS_SIGNING_IDENTITY:-}" ]; then
+    identity_quoted=$(printf '%q' "$MACOS_SIGNING_IDENTITY")
+    cmd="$cmd --codesign-identity=$identity_quoted"
+    if [ -n "${MACOS_ENTITLEMENTS:-}" ] && [ -f "$MACOS_ENTITLEMENTS" ]; then
+      entitlements_quoted=$(printf '%q' "$MACOS_ENTITLEMENTS")
+      cmd="$cmd --osx-entitlements-file=$entitlements_quoted"
+    fi
+  fi
+
   # Add include-data-dirs using Python script
   if [ -n "$INCLUDE_DATA_DIRS" ]; then
     echo "Processing include-data-dirs for $file..."
