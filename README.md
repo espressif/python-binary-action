@@ -198,7 +198,11 @@ To enable signing, you must explicitly pass the Azure credentials as inputs from
 
 For `macos-amd64` and `macos-arm64` builds on macOS runners, you can sign and optionally notarize binaries using the same [espressif/release-sign](https://github.com/espressif/release-sign) action. If the macOS certificate is not set, signing will be skipped with a warning message.
 
-**Notarization** runs only on tag pushes (for example `v5.2.0`). Branch pushes and pull requests are still **signed** when credentials are provided, but notarization credentials are not passed to `release-sign`.
+**One-file binaries** must be signed during the PyInstaller build (`--codesign-identity`), not only afterward. On eligible `push` and `release` events within the `espressif` organization, this action imports the Developer ID certificate before PyInstaller runs so embedded libraries and the bootloader share the same Team ID. The outer binary is then re-signed and optionally notarized by `release-sign`. A post-sign smoke test runs after signing to catch Team ID mismatches that pre-sign tests miss.
+
+**Notarization** runs only on tag pushes (for example `v5.2.0`). Signing and build-time code signing run on `push` and `release` events within the `espressif` organization when all macOS signing credentials are provided. Pull request builds compile and test unsigned binaries; signing is skipped even if credentials are passed.
+
+If you use `macos-entitlements`, it is applied during both the PyInstaller build and the `release-sign` step.
 
 To enable signing, pass a base64-encoded Developer ID `.p12` certificate and related credentials from your workflow secrets:
 
@@ -320,22 +324,22 @@ jobs:
 
 This action uses the [espressif/release-sign](https://github.com/espressif/release-sign) action for signing. Signing is optional but strongly recommended. The action will produce a warning if a Windows or macOS executable was built but was not signed.
 
-| Input                      | Description                                 | Default | Example                                   |
-|----------------------------|---------------------------------------------|---------|-------------------------------------------|
-| **Windows**                |                                             |         |                                           |
-| `azure-client-id`          | Azure client ID for signing                 | `""`    | `${{ secrets.AZURE_CLIENT_ID }}`          |
-| `azure-client-secret`      | Azure client secret for signing             | `""`    | `${{ secrets.AZURE_CLIENT_SECRET }}`      |
-| `azure-tenant-id`          | Azure tenant ID for signing                 | `""`    | `${{ secrets.AZURE_TENANT_ID }}`          |
-| `azure-keyvault-uri`       | Azure key vault URI for signing             | `""`    | `${{ secrets.AZURE_KEYVAULT_URI }}`       |
-| `azure-keyvault-cert-name` | Azure key vault certificate name            | `""`    | `${{ secrets.AZURE_KEYVAULT_CERT_NAME }}` |
-| **macOS**                  |                                             |         |                                           |
-| `macos-signing-identity`   | Code signing identity                       | `""`    | `${{ secrets.MACOS_SIGNING_IDENTITY }}`   |
-| `macos-certificate`        | Base64-encoded .p12 certificate             | `""`    | `${{ secrets.MACOS_CERTIFICATE }}`        |
-| `macos-certificate-pwd`    | Password for .p12 certificate               | `""`    | `${{ secrets.MACOS_CERTIFICATE_PWD }}`    |
-| `macos-entitlements`       | Entitlements plist (optional)               | `""`    | `"./entitlements.plist"`                  |
-| `notarization-username`    | Apple ID for notarization (tag pushes only) | `""`    | `${{ secrets.NOTARIZATION_USERNAME }}`    |
-| `notarization-password`    | App-specific password (tag pushes only)     | `""`    | `${{ secrets.NOTARIZATION_PASSWORD }}`    |
-| `notarization-team-id`     | Apple Team ID (tag pushes only)             | `""`    | `${{ secrets.NOTARIZATION_TEAM_ID }}`     |
+| Input                      | Description                                    | Default | Example                                   |
+|----------------------------|------------------------------------------------|---------|-------------------------------------------|
+| **Windows**                |                                                |         |                                           |
+| `azure-client-id`          | Azure client ID for signing                    | `""`    | `${{ secrets.AZURE_CLIENT_ID }}`          |
+| `azure-client-secret`      | Azure client secret for signing                | `""`    | `${{ secrets.AZURE_CLIENT_SECRET }}`      |
+| `azure-tenant-id`          | Azure tenant ID for signing                    | `""`    | `${{ secrets.AZURE_TENANT_ID }}`          |
+| `azure-keyvault-uri`       | Azure key vault URI for signing                | `""`    | `${{ secrets.AZURE_KEYVAULT_URI }}`       |
+| `azure-keyvault-cert-name` | Azure key vault certificate name               | `""`    | `${{ secrets.AZURE_KEYVAULT_CERT_NAME }}` |
+| **macOS**                  |                                                |         |                                           |
+| `macos-signing-identity`   | Code signing identity                          | `""`    | `${{ secrets.MACOS_SIGNING_IDENTITY }}`   |
+| `macos-certificate`        | Base64-encoded .p12 certificate                | `""`    | `${{ secrets.MACOS_CERTIFICATE }}`        |
+| `macos-certificate-pwd`    | Password for .p12 certificate                  | `""`    | `${{ secrets.MACOS_CERTIFICATE_PWD }}`    |
+| `macos-entitlements`       | Entitlements plist - build and sign (optional) | `""`    | `"./entitlements.plist"`                  |
+| `notarization-username`    | Apple ID for notarization (tag pushes only)    | `""`    | `${{ secrets.NOTARIZATION_USERNAME }}`    |
+| `notarization-password`    | App-specific password (tag pushes only)        | `""`    | `${{ secrets.NOTARIZATION_PASSWORD }}`    |
+| `notarization-team-id`     | Apple Team ID (tag pushes only)                | `""`    | `${{ secrets.NOTARIZATION_TEAM_ID }}`     |
 
 ## Outputs
 

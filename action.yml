@@ -95,7 +95,8 @@ inputs:
     required: false
     default: ''
   macos-entitlements:
-    description: Path to entitlements file for codesign (espressif/release-sign, optional)
+    description: Path to entitlements file for codesign during PyInstaller build and
+      espressif/release-sign (optional)
     required: false
     default: ''
   notarization-username:
@@ -273,11 +274,28 @@ runs:
           '${{ inputs.pip-extra-index-url }}' \
           '${{ inputs.install-deps-command }}'
 
+    - name: Setup macOS signing keychain
+      id: macos-signing-keychain
+      if: |
+        (inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') &&
+        inputs.macos-certificate != '' && inputs.macos-signing-identity != '' &&
+        inputs.macos-certificate-pwd != '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
+      shell: bash
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ inputs.macos-signing-identity }}
+        MACOS_CERTIFICATE: ${{ inputs.macos-certificate }}
+        MACOS_CERTIFICATE_PWD: ${{ inputs.macos-certificate-pwd }}
+      run: bash $GITHUB_ACTION_PATH/setup_macos_signing_keychain.sh
+
     - name: Build with PyInstaller (Native platforms)
       if: |
         steps.setup-platform.outputs.needs-docker == 'false' && steps.setup-platform.outputs.needs-arm-emulation == 'false'
       id: build
       shell: bash
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ steps.macos-signing-keychain.outcome == 'success' && inputs.macos-signing-identity || '' }}
+        MACOS_ENTITLEMENTS: ${{ steps.macos-signing-keychain.outcome == 'success' && inputs.macos-entitlements || '' }}
       run: |
         $GITHUB_ACTION_PATH/build_with_pyinstaller.sh '${{ inputs.target-platform }}' '${{ inputs.output-dir }}' '${{ inputs.scripts }}' '${{ inputs.script-name }}' '${{ inputs.icon-file }}' '${{ inputs.include-data-dirs }}' '${{ steps.setup-platform.outputs.data-separator }}' '${{ inputs.additional-args }}'
 
@@ -315,7 +333,9 @@ runs:
       if: |
         (
           (inputs.target-platform == 'windows-amd64' && inputs.azure-client-secret != '') ||
-          ((inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') && inputs.macos-certificate != '')
+          ((inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') &&
+            inputs.macos-certificate != '' && inputs.macos-signing-identity != '' &&
+            inputs.macos-certificate-pwd != '')
         ) &&
         (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
       uses: espressif/release-sign@master
@@ -333,6 +353,21 @@ runs:
         notarization-username: ${{ github.ref_type == 'tag' && inputs.notarization-username || '' }}
         notarization-password: ${{ github.ref_type == 'tag' && inputs.notarization-password || '' }}
         notarization-team-id: ${{ github.ref_type == 'tag' && inputs.notarization-team-id || '' }}
+
+    - name: Verify signed builds
+      if: |
+        (inputs.target-platform == 'macos-amd64' || inputs.target-platform == 'macos-arm64') &&
+        inputs.macos-certificate != '' && inputs.macos-signing-identity != '' &&
+        inputs.macos-certificate-pwd != '' &&
+        (github.event_name == 'push' || github.event_name == 'release') && github.repository_owner == 'espressif'
+      shell: bash
+      run: |-
+        $GITHUB_ACTION_PATH/test_executables.sh \
+          "${{ inputs.scripts }}" \
+          "${{ inputs.script-name }}" \
+          "${{ inputs.output-dir }}" \
+          "${{ steps.setup-platform.outputs.exe-extension }}" \
+          "${{ inputs.test-command-args }}"
 
     - name: Remove leftover signature files
       if: |
