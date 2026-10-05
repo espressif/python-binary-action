@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
 """
 Process include-data-dirs JSON and generate PyInstaller arguments
 Supports per-script configuration with wildcard support
 """
 
-import json
 import argparse
 import fnmatch
-import sys
+import json
 import os
+import sys
 
 
 def fix_windows_paths(include_dirs_json: str) -> str:
@@ -85,7 +84,7 @@ Examples:
 
   # File input (to avoid shell escaping issues)
   python process_include_dirs.py '/tmp/include_data_dirs.json' ':' 'main.py'
-        """,  # noqa: E501
+        """,
     )
     parser.add_argument("include_dirs", help="JSON string or file path of include directories")
     parser.add_argument(
