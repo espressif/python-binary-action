@@ -310,7 +310,7 @@ jobs:
 | `include-data-dirs`       | Mapping script names to data directories to include. Supports wildcards (*). | `[]`     | `{"main.py": ["./data"], "*": ["./common"]}` |
 | `icon-file`               | Path to icon file (Windows only)          | `""`                                        | `"./icon.ico"`                               |
 | `python-version`          | Python version to use for building        | `"3.13"`                                    | `"3.12"`                                     |
-| `pyinstaller-version`     | PyInstaller version to install            | `6.11.1`                                    | `""` (use latest)                            |
+| `pyinstaller-version`     | PyInstaller version to install            | `6.22.3`                                    | `""` (use latest)                            |
 | `additional-args`         | Additional PyInstaller arguments          | `""`                                        | `"--hidden-import=module"`                   |
 | `pip-extra-index-url`     | Extra Python package index URL            | `https://dl.espressif.com/pypi`             | `""`                                         |
 | `install-deps-command`    | Command to install project dependencies   | `"uv pip install -e ."`                     | `"uv pip install -r requirements.txt"`       |
@@ -319,6 +319,8 @@ jobs:
 
 > [!IMPORTANT]
 > Be careful when changing `pyinstaller-version` as it might lead to increased false positives with anti-virus software. It is recommended to check your executables with antivirus software such as [Virustotal](https://www.virustotal.com/gui/home/upload).
+>
+> The default (`6.22.3`) supports Python 3.15 and was selected from Python 3.15-compatible candidates after comparing antivirus detection rates for official Windows bootloaders.
 
 ### Optional Inputs for Signing Binaries
 

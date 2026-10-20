@@ -5,7 +5,7 @@
 
 set -e
 
-PYINSTALLER_VERSION="${1:-6.11.1}"
+PYINSTALLER_VERSION="${1:-6.22.3}"
 EXTRA_INDEX_URL="${2:-}"
 INSTALL_DEPS_COMMAND="${3:-uv pip install -e .}"
 
