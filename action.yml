@@ -33,11 +33,11 @@ inputs:
     required: false
     default: '3.13'
   pyinstaller-version:
-    description: PyInstaller version to install. Default is 6.11.1 because it has
-      the lowest false positive rate with antivirus. For latest version, use empty
-      string.
+    description: PyInstaller version to install. Default is 6.22.3 (supports Python
+      3.15; selected among 3.15-compatible releases after antivirus comparison). For
+      latest version, use empty string.
     required: false
-    default: 6.11.1
+    default: 6.22.3
   additional-args:
     description: Additional PyInstaller arguments
     required: false
