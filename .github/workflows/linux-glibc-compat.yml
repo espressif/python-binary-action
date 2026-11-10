@@ -1,0 +1,50 @@
+name: Linux glibc compatibility
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-glibc:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runs-on: ubuntu-24.04
+            docker-platform: linux/amd64
+          - platform: linux-aarch64
+            runs-on: ubuntu-24.04-arm
+            docker-platform: linux/arm64
+          - platform: linux-armv7
+            runs-on: ubuntu-24.04
+            docker-platform: linux/arm/v7
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build binary
+        uses: ./
+        with:
+          scripts: process_include_dirs.py
+          script-name: process_include_dirs
+          output-dir: ./${{ matrix.platform }}
+          target-platform: ${{ matrix.platform }}
+          install-deps-command: 'true'
+          test-command-args: --help
+
+      - name: Verify binary on Debian Bullseye (glibc 2.31)
+        run: |
+          docker run --rm \
+            --platform ${{ matrix.docker-platform }} \
+            -v "$PWD/${{ matrix.platform }}:/binaries:ro" \
+            debian:bullseye \
+            /binaries/process_include_dirs --help
