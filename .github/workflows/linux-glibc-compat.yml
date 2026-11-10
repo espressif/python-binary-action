@@ -41,6 +41,16 @@ jobs:
           install-deps-command: 'true'
           test-command-args: --help
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Check glibc versions required by bundled libraries
+        # The Docker build leaves a root-owned .venv in the workspace that uv cannot inspect
+        working-directory: ${{ runner.temp }}
+        run: uv run --script "$GITHUB_WORKSPACE/.github/scripts/check_glibc_versions.py" --max-glibc 2.31 "$GITHUB_WORKSPACE/${{ matrix.platform }}/process_include_dirs"
+
       - name: Verify binary on Debian Bullseye (glibc 2.31)
         run: |
           docker run --rm \
