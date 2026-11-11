@@ -38,7 +38,7 @@ This action provides several key benefits:
 - **Windows icon support**: Allows custom icons for Windows executables
 - **Flexible `PyInstaller` configuration**: Supports additional `PyInstaller` arguments
 - **ARM cross-compilation**: Uses Public Preview runners for aarch64 and Docker containers with Qemu for ARMv7 architecture builds
-- **GLIBC 2.31+ support**: Uses older Linux images in Docker for best compatibility with Linux targets
+- **GLIBC 2.31+ support**: Builds Linux binaries in older images (Ubuntu 20.04 for amd64/aarch64, Debian Bullseye for ARMv7), so they run on Ubuntu 20.04 / Debian 11 and newer
 
 ## Usage Examples
 
@@ -140,7 +140,7 @@ Building the project with default configuration will result in script name `__ma
 ### ARM Architecture Build
 
 
-The ARMv7 build image already includes most of the required system packages by default. However, if you need to add extra system packages, you can do so as shown in the example below.
+The ARMv7 build runs in the Espressif `idf-python-wheels-armv7l-legacy` image (Debian Bullseye), which already includes most of the required system packages by default. However, if you need to add extra system packages, you can do so as shown in the example below.
 For more details about the ARMv7 image, refer to its [Dockerfile definition](https://github.com/espressif/github-esp-dockerfiles/blob/master/idf_python_wheels_legacy/Dockerfile).
 
 ```yaml
@@ -257,10 +257,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
@@ -286,7 +286,7 @@ jobs:
         run: cp LICENSE README.md ./${{ matrix.platform }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: executable-${{ matrix.platform }}
           path: ./${{ matrix.platform }}
